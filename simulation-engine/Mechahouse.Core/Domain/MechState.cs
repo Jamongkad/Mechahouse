@@ -37,11 +37,26 @@ public sealed class MechState
 
     public double Food { get; internal set; }
 
+    // These are deliberately kept as sensor readings rather than extra inventory
+    // resources. The thermal system moves them toward operating temperatures as
+    // the engine and water processor run.
+    public double OilTemperatureC { get; internal set; } = 72;
+
+    public double CoolantTemperatureC { get; internal set; } = 75;
+
+    public double OilPressureKPa { get; internal set; } = 250;
+
+    public double WaterTemperatureC { get; internal set; } = 18;
+
+    public double CabinTemperatureC { get; internal set; } = 19;
+
     public IReadOnlyList<ModuleInstance> Modules => _modules;
 
     public IReadOnlyList<Entity> Entities => _modules;
 
-    public int UsedSlots => _modules.Sum(module => module.OccupiedSlots.Count);
+    public int UsedSlots => _modules
+        .Where(module => !IsEmptyOmniSlot(module))
+        .Sum(module => module.OccupiedSlots.Count);
 
     public int AvailableSlots => SlotCapacity - UsedSlots;
 
@@ -60,11 +75,20 @@ public sealed class MechState
             return false;
         }
 
-        return _modules.All(module => module.OccupiedSlots.All(slot => !slotIds.Contains(slot)));
+        return _modules
+            .Where(module => !IsEmptyOmniSlot(module))
+            .All(module => module.OccupiedSlots.All(slot => !slotIds.Contains(slot)));
     }
 
     internal IReadOnlyList<SlotId>? FindFirstAvailablePlacement(int slotsRequired, SlotId? requiredSlot = null)
     {
-        return Layout.FindFirstAvailablePlacement(_modules.SelectMany(module => module.OccupiedSlots).ToArray(), slotsRequired, requiredSlot);
+        var occupied = _modules
+            .Where(module => !IsEmptyOmniSlot(module))
+            .SelectMany(module => module.OccupiedSlots)
+            .ToArray();
+        return Layout.FindFirstAvailablePlacement(occupied, slotsRequired, requiredSlot);
     }
+
+    internal bool IsEmptyOmniSlot(ModuleInstance module) =>
+        module.DefinitionId == "omni_slot" && !module.HasComponent<InstalledInOmniSlotComponent>();
 }

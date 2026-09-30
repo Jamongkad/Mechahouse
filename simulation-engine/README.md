@@ -8,6 +8,14 @@ This directory contains the standalone C# simulation prototype. It does not refe
 - `Mechahouse.Cli`: a thin text adapter that renders the Core state and sends player commands.
 - `Mechahouse.Tests`: a dependency-free automated test executable.
 
+The CLI is composed as a small front-end adapter. `Program.cs` is only the
+composition root; `CliApplication` owns the application loop,
+`CliCommandRouter` translates input into Core commands,
+`EntityReferenceResolver` maps user-facing references to entities, and
+`CliRenderer` formats Core state for the terminal. This keeps the simulation
+engine independent of the CLI and leaves the same Core API available to a
+future Godot or web front end.
+
 The architectural rule for this phase is:
 
 > Entities hold data. Systems hold rules. GameState holds the current truth. Rendering displays that truth.
@@ -22,15 +30,28 @@ The initial Medium mech uses the existing 3×3 logical grid. Slot numbers increa
 [1][2][3]  bottom
 ```
 
-The starter interior contains exactly these entities:
+The starter interior renders as a fixed-width cutaway. Module condition, power,
+water level, and player location are projected from the current simulation state:
 
 ```text
-[COC][HYD][HYD]
-[OMN][ @ ][WAT]
-[ENG][ENG][WAT]
+         M-07 INTERIOR
++---------+---------+---------+
+|   /\    | " " " "!| " " " "!|
+|  /__\   |  |||||  |  |||||  |
+|  |[]|   |  |||||  |  |||||  |
++---------+---------+---------+
+|         |  _____  | |     |!|
+|    .    | |_____| | |~~~~~| |
+|         |    @    | |~~~~~| |
++---------+---------+---------+
+|  [====]!|[====]  !| |     |!|
+|  [=**=]--[=**=]   | |~~~~~| |
+|  [====] |[====]   | |~~~~~| |
++---------+---------+---------+
+@ YOU Q5  ! WORN  x OFFLINE
 ```
 
-The labels above are a compact CLI view of the actual footprints:
+The glyphs above represent the actual footprints:
 
 - Engine Room: slots 1, 2
 - Water Processing: slots 3, 6
@@ -53,15 +74,18 @@ Each interior entity is an `Entity` with a component collection. The initial com
 - `ExaminableComponent`
 - `NarratableComponent`
 
-The systems query these components rather than checking entity names. Omni Slots remain generic locations; they are not special-cased for Hydroponics.
+The systems query these components rather than checking entity names. An empty
+Omni Slot is a universal installation foundation: one-slot modules replace it,
+while larger modules expand into contiguous free quadrants from that anchor.
 
 ### Room-entry narration
 
 `ModuleDefinition` supports an optional `NarrationProfile? Narration = null` property.
-The profile currently contains the short `OnEnter` description shown when the player
-enters that module's room. When a `ModuleInstance` is created, the profile becomes
-a `NarratableComponent`; movement reads that component from the destination entity
-and displays the narration.
+The profile contains the short `OnEnter` description shown when the player enters
+that module's room. It can also provide `OnEnabled`, `OnDisabled`, and
+`OnEnabledWithoutPower` text for state-aware toggle narration. When a
+`ModuleInstance` is created, the profile becomes a `NarratableComponent`; movement
+and interactions read that component and display the appropriate narration.
 
 This keeps room flavor data pluggable with module creation:
 
@@ -88,6 +112,8 @@ narration profile remain valid and simply produce no arrival text.
 PowerSystem
     ↓
 WaterSystem
+    ↓
+ThermalSystem
     ↓
 HydroponicsSystem
     ↓
@@ -144,20 +170,32 @@ disable <module-id>
 enable <module-id>
 repair <module-id>
 examine <entity-name|definition-id|quadrant>
-interactions [entity-name|definition-id|quadrant]
-interact <target> <examine|toggle|repair|sleep|install|remove> [part-id]
+interact [entity-name|definition-id|quadrant]
+interact <target> <examine|use|toggle|repair|sleep|install|remove> [part-id]
 wait <hours>
 advance <hours>   # alias for wait
 ```
 
 `interior` displays the 3×3 mech layout and the player's avatar. `status` displays
-the current resources, capacity, power, water, food, and simulation clock.
+the cockpit-style telemetry page: time, propulsion weight/load, generator output,
+power demand/reserve, engine temperatures and oil pressure, fresh-water tank and
+flow, habitat readings, a conservative water range estimate, and warnings. Both
+the telemetry page and interior systems readout are framed as printed mech
+console overlays.
+Food, scrap, and parts are intentionally shown as `???` because this simulation
+does not claim a reliable automated inventory sensor for them; the underlying
+values remain available to the build and hydroponics systems.
 
-`interactions` opens a menu for the entity at the player's current quadrant. A
+The one-slot `storage` part costs 3 scrap and adds 1 unit of weight. It provides
+lockers for both scrap and food without pretending to be an automated sensor;
+`interact storage use` opens the lockers and performs a manual inventory count.
+
+`interact` opens a menu for the entity at the player's current quadrant. A
 target can be supplied when the entity occupies another quadrant, but the player
 must move there before selecting an action. Use Up/Down to change the selection,
 Enter to choose it, or Escape to cancel. The menu always includes Cancel. In a
-redirected or non-interactive terminal, use the direct `interact` command instead.
+redirected or non-interactive terminal, include an action to use `interact`
+directly instead.
 
 
 The CLI avatar is presentation-only. Its ASCII glyph is owned by `Mechahouse.Cli/AsciiPlayerAvatar.cs`; the player’s actual location remains in Core `PlayerState`.
@@ -166,4 +204,6 @@ The CLI does not calculate power, water, or food outcomes. It reads the state pr
 
 ## Scope
 
-This phase is intentionally limited to the mech interior. It does not model combat, weapons, arms, legs, external armor, enemies, projectiles, fire, heat, networking, persistence, procedural generation, or a generalized ECS framework.
+This phase is intentionally limited to the mech interior. It does not model combat,
+weapons, arms, legs, external armor, enemies, projectiles, fire, heat damage,
+networking, persistence, procedural generation, or a generalized ECS framework.

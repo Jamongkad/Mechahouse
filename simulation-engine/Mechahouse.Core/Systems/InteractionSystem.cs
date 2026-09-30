@@ -13,7 +13,7 @@ public static class InteractionSystem
                     InteractionType.Examine => entity.HasComponent<ExaminableComponent>(),
                     InteractionType.Repair => entity.TryGetComponent<OperationalComponent>(out var operational) &&
                                               operational is not null && operational.Durability < 100,
-                    InteractionType.Sleep or InteractionType.Install => !IsCritical(entity),
+                    InteractionType.Sleep or InteractionType.Install or InteractionType.Use => !IsCritical(entity),
                     _ => true
                 })
                 .ToHashSet()

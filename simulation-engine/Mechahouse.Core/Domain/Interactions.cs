@@ -28,7 +28,16 @@ public sealed record ExaminationProfile(
     string WornObservation,
     string CriticalObservation);
 
-public sealed record NarrationProfile(string OnEnter);
+public sealed record NarrationProfile(
+    string OnEnter,
+    string? OnEnabled = null,
+    string? OnDisabled = null,
+    string? OnEnabledWithoutPower = null);
+
+public sealed record StorageProfile(
+    bool StoresScrap,
+    bool StoresFood,
+    string InventoryNarration);
 
 public sealed class ExaminableComponent(ExaminationProfile profile)
 {
@@ -38,6 +47,11 @@ public sealed class ExaminableComponent(ExaminationProfile profile)
 public sealed class NarratableComponent(NarrationProfile profile)
 {
     public NarrationProfile Profile { get; } = profile;
+}
+
+public sealed class StorageComponent(StorageProfile profile)
+{
+    public StorageProfile Profile { get; } = profile;
 }
 
 public sealed class InteractionCapabilitiesComponent(IEnumerable<InteractionType> interactions)

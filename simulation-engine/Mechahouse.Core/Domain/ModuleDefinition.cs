@@ -16,4 +16,5 @@ public sealed record ModuleDefinition(
     IReadOnlyList<InteractionType>? Interactions = null,
     ExaminationProfile? Examination = null,
     NarrationProfile? Narration = null,
-    double InitialDurability = 100);
+    double InitialDurability = 100,
+    StorageProfile? Storage = null);

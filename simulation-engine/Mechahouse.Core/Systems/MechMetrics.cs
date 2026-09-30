@@ -13,7 +13,12 @@ public sealed record MechMetrics(
     double WaterProduction,
     double WaterConsumption,
     double FoodProduction,
-    double FoodConsumption)
+    double FoodConsumption,
+    double OilTemperatureC,
+    double CoolantTemperatureC,
+    double OilPressureKPa,
+    double WaterTemperatureC,
+    double CabinTemperatureC)
 {
-    public static MechMetrics Empty { get; } = new(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+    public static MechMetrics Empty { get; } = new(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 }

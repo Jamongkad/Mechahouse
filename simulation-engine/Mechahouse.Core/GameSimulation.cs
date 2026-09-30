@@ -25,12 +25,15 @@ public sealed class GameSimulation
             food: 20);
         _player = new PlayerState(new SlotId(5));
         _state = new GameState(_mech, _player);
+        InstallDefaultOmniSlots();
 
         if (installStarterModules)
         {
             InstallStarterModules();
         }
 
+        RefreshDerivedState();
+        ThermalSystem.Initialize(_state);
         RefreshDerivedState();
     }
 
@@ -84,6 +87,7 @@ public sealed class GameSimulation
         // produced by the phase immediately before them.
         PowerSystem.Run(_state);
         WaterSystem.Run(_state, hours);
+        ThermalSystem.Run(_state, hours);
         HydroponicsSystem.Run(_state, hours);
         FoodSystem.Run(_state, hours);
         CleanupSystem.Run(_state);
@@ -126,8 +130,23 @@ public sealed class GameSimulation
             return Failure($"'{definition.Name}' would exceed the {Format(_mech.WeightCapacity)} weight capacity.");
         }
 
+        var emptyOmniSlots = _mech.Modules
+            .Where(module => _mech.IsEmptyOmniSlot(module))
+            .Where(module => module.OccupiedSlots.Any(slotIds.Contains))
+            .ToArray();
+        foreach (var emptyOmni in emptyOmniSlots)
+        {
+            _mech.RemoveModule(emptyOmni);
+        }
+
         _mech.Scrap -= definition.BuildCost;
-        _mech.AddModule(new ModuleInstance(definition, slotIds));
+        var built = new ModuleInstance(definition, slotIds);
+        if (emptyOmniSlots.Length > 0 && definition.Id != "omni_slot")
+        {
+            built.MarkInstalledInOmniSlot();
+        }
+
+        _mech.AddModule(built);
         RefreshDerivedState();
         return Success($"Built {definition.Name} in slots {FormatSlots(slotIds)}.");
     }
@@ -142,8 +161,7 @@ public sealed class GameSimulation
 
         module.Enabled = command.Enabled;
         RefreshDerivedState();
-        var status = command.Enabled ? "enabled" : "disabled";
-        return Success($"{module.Definition.Name} {status}.");
+        return Success(ToggleNarration(module, command.Enabled));
     }
 
     private SimulationResult RepairModule(RepairModuleCommand command)
@@ -162,6 +180,25 @@ public sealed class GameSimulation
         var repair = RepairSystem.Run(module, command.Amount);
         RefreshDerivedState();
         return Success($"Repaired {module.Definition.Name} from {Format(repair.PreviousDurability)}% to {Format(repair.CurrentDurability)}%.");
+    }
+
+    private static string ToggleNarration(ModuleInstance module, bool enabled)
+    {
+        var fallback = $"{module.Definition.Name} {(enabled ? "enabled" : "disabled")}.";
+        if (!module.TryGetComponent<NarratableComponent>(out var narration) || narration is null)
+        {
+            return fallback;
+        }
+
+        if (enabled &&
+            module.TryGetComponent<PowerConsumerComponent>(out var power) && power is not null && !power.IsPowered)
+        {
+            return narration.Profile.OnEnabledWithoutPower ?? fallback;
+        }
+
+        return enabled
+            ? narration.Profile.OnEnabled ?? fallback
+            : narration.Profile.OnDisabled ?? fallback;
     }
 
     private SimulationResult Interact(InteractionIntent intent)
@@ -196,6 +233,7 @@ public sealed class GameSimulation
             InteractionType.Toggle => ToggleModule(new ToggleModuleCommand(
                 target.Id.ToString(),
                 !target.GetComponent<OperationalComponent>().Enabled)),
+            InteractionType.Use => UseStorage(target),
             InteractionType.Repair => RepairModule(new RepairModuleCommand(target.Id.ToString())),
             InteractionType.Sleep => Sleep(),
             InteractionType.Install => InstallInOmniSlot(target, intent.PartId),
@@ -205,7 +243,6 @@ public sealed class GameSimulation
     }
 
     public IReadOnlyList<ModuleDefinition> GetInstallablePartDefinitions() => _definitions.Values
-        .Where(definition => definition.SlotsRequired == 1)
         .Where(definition => definition.Interactions?.Contains(InteractionType.Install) != true)
         .OrderBy(definition => definition.Id, StringComparer.OrdinalIgnoreCase)
         .ToArray();
@@ -215,6 +252,27 @@ public sealed class GameSimulation
         const double sleepHours = 8;
         SimulateElapsedMinutes(sleepHours * 60);
         return Success("You sleep for eight hours. The mech's systems keep ticking around you.");
+    }
+
+    private SimulationResult UseStorage(Entity target)
+    {
+        if (!target.TryGetComponent<StorageComponent>(out var storage) || storage is null)
+        {
+            return Failure($"{target.Name} has no usable storage.");
+        }
+
+        var inventory = new List<string>();
+        if (storage.Profile.StoresScrap)
+        {
+            inventory.Add($"Scrap: {_mech.Scrap}");
+        }
+
+        if (storage.Profile.StoresFood)
+        {
+            inventory.Add($"Food: {Format(_mech.Food)}");
+        }
+
+        return Success($"{storage.Profile.InventoryNarration}\n{string.Join('\n', inventory)}");
     }
 
     private SimulationResult InstallInOmniSlot(Entity target, string? partId)
@@ -231,9 +289,9 @@ public sealed class GameSimulation
             return Failure($"Choose an installable part: {string.Join(", ", GetInstallablePartDefinitions().Select(part => part.Id))}.");
         }
 
-        if (definition.SlotsRequired != 1 || definition.Interactions?.Contains(InteractionType.Install) == true)
+        if (definition.Interactions?.Contains(InteractionType.Install) == true)
         {
-            return Failure($"'{definition.Name}' cannot fit in a single Omni Slot.");
+            return Failure($"'{definition.Name}' is not an installable module.");
         }
 
         if (omniSlot.OccupiedSlots.Count != 1)
@@ -241,24 +299,41 @@ public sealed class GameSimulation
             return Failure("This Omni Slot does not occupy exactly one quadrant.");
         }
 
+        var slot = target.GetComponent<PositionComponent>().Quadrant;
         if (_mech.Scrap < definition.BuildCost)
         {
             return Failure($"Not enough scrap for '{definition.Name}'. Need {definition.BuildCost}, have {_mech.Scrap}.");
         }
+
+        var availableOccupiedSlots = _mech.Modules
+            .Where(module => !_mech.IsEmptyOmniSlot(module))
+            .SelectMany(module => module.OccupiedSlots)
+            .ToArray();
+        var placement = _mech.Layout.FindFirstAvailablePlacement(
+            availableOccupiedSlots,
+            definition.SlotsRequired,
+            slot);
+        if (placement is null)
+        {
+            return Failure($"'{definition.Name}' does not have a contiguous footprint available from quadrant {slot.Number}.");
+        }
+
+        var anchoredPlacement = new[] { slot }
+            .Concat(placement.Where(placedSlot => placedSlot != slot))
+            .ToArray();
 
         if (_mech.CurrentWeight - omniSlot.Definition.Weight + definition.Weight > _mech.WeightCapacity)
         {
             return Failure($"'{definition.Name}' would exceed the {Format(_mech.WeightCapacity)} weight capacity.");
         }
 
-        var slot = target.GetComponent<PositionComponent>().Quadrant;
-        _mech.RemoveModule(omniSlot);
-        var installed = new ModuleInstance(definition, [slot]);
+        RemoveEmptyOmniSlots(anchoredPlacement);
+        var installed = new ModuleInstance(definition, anchoredPlacement);
         installed.MarkInstalledInOmniSlot();
         _mech.AddModule(installed);
         _mech.Scrap -= definition.BuildCost;
         RefreshDerivedState();
-        return Success($"Installed {definition.Name} in the Omni Slot at quadrant {slot.Number}.");
+        return Success($"Installed {definition.Name} from the Omni Slot at quadrant {slot.Number}; it occupies {FormatSlots(anchoredPlacement)}.");
     }
 
     private SimulationResult RemoveFromOmniSlot(Entity target)
@@ -274,8 +349,12 @@ public sealed class GameSimulation
         }
 
         var slot = module.GetComponent<PositionComponent>().Quadrant;
+        var restoredSlots = module.OccupiedSlots.ToArray();
         _mech.RemoveModule(module);
-        _mech.AddModule(new ModuleInstance(omniDefinition, [slot]));
+        foreach (var restoredSlot in restoredSlots)
+        {
+            _mech.AddModule(new ModuleInstance(omniDefinition, [restoredSlot]));
+        }
         RefreshDerivedState();
         return Success($"Removed {module.Definition.Name}; the Omni Slot at quadrant {slot.Number} is empty again. No scrap is refunded.");
     }
@@ -338,7 +417,34 @@ public sealed class GameSimulation
 
     private void InstallStarter(string definitionId, params SlotId[] slotIds)
     {
+        RemoveEmptyOmniSlots(slotIds);
         _mech.AddModule(new ModuleInstance(_definitions[definitionId], slotIds));
+    }
+
+    private void InstallDefaultOmniSlots()
+    {
+        if (!_definitions.TryGetValue("omni_slot", out var omniDefinition))
+        {
+            return;
+        }
+
+        foreach (var slot in _mech.Layout.Slots)
+        {
+            _mech.AddModule(new ModuleInstance(omniDefinition, [slot.Id]));
+        }
+    }
+
+    private void RemoveEmptyOmniSlots(IEnumerable<SlotId> slots)
+    {
+        var slotSet = slots.ToHashSet();
+        var emptyOmniSlots = _mech.Modules
+            .Where(module => _mech.IsEmptyOmniSlot(module))
+            .Where(module => module.OccupiedSlots.Any(slotSet.Contains))
+            .ToArray();
+        foreach (var emptyOmni in emptyOmniSlots)
+        {
+            _mech.RemoveModule(emptyOmni);
+        }
     }
 
     private void RefreshDerivedState()

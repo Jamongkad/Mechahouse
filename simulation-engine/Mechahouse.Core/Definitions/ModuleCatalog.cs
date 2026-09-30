@@ -36,6 +36,19 @@ public static class ModuleCatalog
                 Narration: new NarrationProfile(
                     "An empty reinforced frame waits here, its rails scored by old bolts. It is a place prepared for whatever the mech cannot do yet.")),
             new ModuleDefinition(
+                "storage", "Storage Area", 1, 3, 1,
+                Interactions: [InteractionType.Examine, InteractionType.Use, InteractionType.Repair],
+                Examination: new ExaminationProfile(
+                    "Dented lockers and shallow bins have been bolted into every usable gap. Chalk marks divide food from scrap, and every latch has been tied shut against the mech's gait.",
+                    "Several locker doors sit crooked on their hinges. The tie-downs still hold, but loose hardware chatters inside the bins whenever the mech shifts its weight.",
+                    "A mounting rail has torn loose and spilled the lockers against one another. Nothing here can be trusted to stay put until the frame is repaired."),
+                Narration: new NarrationProfile(
+                    "Dented lockers line the compartment, their doors labeled in chalk and grease pencil. This is where the mech keeps the small reserve of things that make another day possible."),
+                Storage: new StorageProfile(
+                    StoresScrap: true,
+                    StoresFood: true,
+                    InventoryNarration: "You undo the wire catches and count the lockers' contents by hand.")),
+            new ModuleDefinition(
                 "hydroponics_small", "Hydroponics", 2, 8, 5, WaterConsumption: 4, FoodProduction: 5,
                 Interactions: [InteractionType.Examine, InteractionType.Repair],
                 Examination: new ExaminationProfile(
@@ -53,7 +66,9 @@ public static class ModuleCatalog
                     "The familiar squeak has sharpened into a metallic scrape. Your father's notes track the sound through years of regular oil changes; now the rhythm suggests the cylinder bore itself may be scoring.",
                     "The scrape catches on every revolution, then rises to a hard shriek. The engine is still turning, but something inside is close to tearing itself apart."),
                 Narration: new NarrationProfile(
-                    "The engine room meets you with a low, uneven thrum. Oil, hot metal, and an old mechanical squeak cling to the air; the sound is part of the mech's rhythm now."),
+                    "The engine room meets you with a low, uneven thrum. Oil, hot metal, and an old mechanical squeak cling to the air; the sound is part of the mech's rhythm now.",
+                    OnEnabled: "You turn the ignition. The starter grinds, catches, and the creaking behemoth shudders awake. Its cylinders fire one after another, their uneven cadence gathering into the engine's familiar thrum.",
+                    OnDisabled: "You pull the engine cutoff. Its heavy rhythm falters, each cylinder falling silent in turn. The hot block ticks more slowly as the last vibrations die away, and then there is only silence."),
                 InitialDurability: 82),
             new ModuleDefinition(
                 "water_processing", "Water Processing", 2, 10, 5, PowerConsumption: 3, WaterProduction: 12,
@@ -63,7 +78,10 @@ public static class ModuleCatalog
                     "The pump pulses unevenly through a film of mineral scale. A strip of newer tubing bridges an older repair; the output is holding, for now.",
                     "The pump knocks without drawing water. The outlet is dry, and the last filter change is long overdue."),
                 Narration: new NarrationProfile(
-                    "Filters, copper lines, and a small condenser crowd the water-processing bay. Mineral scale whitens the joints, but somewhere behind the panels a pump keeps a patient beat."),
+                    "Filters, copper lines, and a small condenser crowd the water-processing bay. Mineral scale whitens the joints, but somewhere behind the panels a pump keeps a patient beat.",
+                    OnEnabled: "You lift the pump switch. A relay snaps, the old motor coughs against its mineral scale, and water begins knocking through the copper lines until the condenser finds its patient rhythm.",
+                    OnDisabled: "You lower the pump switch. The condenser's patient beat stutters out, water rattles back through the old copper lines, and the processing bay settles into stillness.",
+                    OnEnabledWithoutPower: "You lift the pump switch. A relay clicks somewhere behind the panel, but the motor does not answer; without power, the copper lines remain dry and still."),
                 InitialDurability: 82)
         };
 

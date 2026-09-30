@@ -23,6 +23,11 @@ public static class SimulationMetrics
             water.Production,
             water.Consumption,
             food.Production,
-            food.Consumption);
+            food.Consumption,
+            state.Mech.OilTemperatureC,
+            state.Mech.CoolantTemperatureC,
+            state.Mech.OilPressureKPa,
+            state.Mech.WaterTemperatureC,
+            state.Mech.CabinTemperatureC);
     }
 }

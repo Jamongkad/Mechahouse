@@ -62,6 +62,22 @@ public static class ExamineSystem
             facts.Add(new ExaminationFact("Food output", $"{food.CurrentOutput:0.##} / {food.Output:0.##} per day"));
         }
 
+        if (entity.TryGetComponent<StorageComponent>(out var storage) && storage is not null)
+        {
+            var resources = new List<string>();
+            if (storage.Profile.StoresScrap)
+            {
+                resources.Add("Scrap");
+            }
+
+            if (storage.Profile.StoresFood)
+            {
+                resources.Add("Food");
+            }
+
+            facts.Add(new ExaminationFact("Storage", string.Join(", ", resources)));
+        }
+
         return facts;
     }
 }

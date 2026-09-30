@@ -23,6 +23,11 @@ public sealed class ModuleInstance : Entity
             AddComponent(new NarratableComponent(definition.Narration));
         }
 
+        if (definition.Storage is not null)
+        {
+            AddComponent(new StorageComponent(definition.Storage));
+        }
+
         if (capabilities.Supports(InteractionType.Install))
         {
             AddComponent(new OmniSlotComponent());
