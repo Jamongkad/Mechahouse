@@ -49,7 +49,7 @@ public static class ModuleCatalog
                     StoresFood: true,
                     InventoryNarration: "You undo the wire catches and count the lockers' contents by hand.")),
             new ModuleDefinition(
-                "hydroponics_small", "Hydroponics", 2, 8, 5, WaterConsumption: 4, FoodProduction: 5,
+                "hydroponics_small", "Hydroponics", 1, 8, 5, WaterConsumption: 4, FoodProduction: 5,
                 Interactions: [InteractionType.Examine, InteractionType.Repair],
                 Examination: new ExaminationProfile(
                     "Grime has settled into the seams of the old hydroponics racks. Your father built most of this system years ago, joining fittings scavenged from other machines. Somehow, the trays are still growing food.",
@@ -71,7 +71,7 @@ public static class ModuleCatalog
                     OnDisabled: "You pull the engine cutoff. Its heavy rhythm falters, each cylinder falling silent in turn. The hot block ticks more slowly as the last vibrations die away, and then there is only silence."),
                 InitialDurability: 82),
             new ModuleDefinition(
-                "water_processing", "Water Processing", 2, 10, 5, PowerConsumption: 3, WaterProduction: 12,
+                "water_processing", "Water Processing", 1, 10, 5, PowerConsumption: 3, WaterProduction: 12,
                 Interactions: [InteractionType.Examine, InteractionType.Toggle, InteractionType.Repair],
                 Examination: new ExaminationProfile(
                     "A filter stack and condenser occupy the whole compartment. The copper has gone green at the joints, but the pump's low, even note means clean water is still making it through.",

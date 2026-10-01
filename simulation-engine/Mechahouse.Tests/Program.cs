@@ -73,7 +73,7 @@ return failures == 0 ? 0 : 1;
 static void BuildingDeductsScrap()
 {
     var simulation = new GameSimulation(installStarterModules: false);
-    var result = simulation.Execute(new BuildModuleCommand("hydroponics_small", [new SlotId(4), new SlotId(5)]));
+    var result = simulation.Execute(new BuildModuleCommand("hydroponics_small", [new SlotId(5)]));
     Assert(result.Succeeded, result.Message);
     Assert(simulation.State.Mech.Scrap == 42, "Expected 42 scrap after an 8-scrap build.");
 }
@@ -81,14 +81,16 @@ static void BuildingDeductsScrap()
 static void BuildingOccupiesSlots()
 {
     var simulation = new GameSimulation(installStarterModules: false);
-    var result = simulation.Execute(new BuildModuleCommand("hydroponics_small", [new SlotId(4), new SlotId(5)]));
+    var result = simulation.Execute(new BuildModuleCommand("hydroponics_small", [new SlotId(5)]));
     Assert(result.Succeeded, result.Message);
-    Assert(simulation.State.Metrics.UsedSlots == 2, "Hydroponics should use two slots.");
+    Assert(simulation.State.Metrics.UsedSlots == 1, "Hydroponics should use one slot.");
 }
 
 static void BuildingRejectsInsufficientSpace()
 {
-    var simulation = new GameSimulation(installStarterModules: false);
+    var definitions = ModuleCatalog.CreateDefault().ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.OrdinalIgnoreCase);
+    definitions["wide_test"] = new ModuleDefinition("wide_test", "Wide Test Module", 2, 0, 0);
+    var simulation = new GameSimulation(installStarterModules: false, definitions);
     for (var slot = 1; slot <= 8; slot++)
     {
         BuildAt(simulation, "bed", slot);
@@ -96,7 +98,7 @@ static void BuildingRejectsInsufficientSpace()
 
     Assert(simulation.Execute(new MovePlayerCommand(new SlotId(9))).Succeeded, "Player should move to the last free slot.");
 
-    var result = simulation.Execute(new BuildModuleCommand("hydroponics_small"));
+    var result = simulation.Execute(new BuildModuleCommand("wide_test"));
     Assert(!result.Succeeded, "A two-slot module should not fit when only one slot remains.");
 }
 
@@ -104,8 +106,8 @@ static void BuildingRejectsInsufficientScrap()
 {
     var simulation = new GameSimulation(installStarterModules: false);
     BuildAt(simulation, "engine_room", 1, 2);
-    BuildAt(simulation, "water_processing", 3, 6);
-    BuildAt(simulation, "hydroponics_small", 8, 9);
+    BuildAt(simulation, "water_processing", 3);
+    BuildAt(simulation, "hydroponics_small", 8);
     Assert(simulation.Execute(new MovePlayerCommand(new SlotId(4))).Succeeded, "Player should move to a free placement.");
     var result = simulation.Execute(new BuildModuleCommand("engine_room", [new SlotId(4), new SlotId(5)]));
     Assert(!result.Succeeded && result.Message.Contains("scrap", StringComparison.OrdinalIgnoreCase), "The additional engine room should fail for insufficient scrap.");
@@ -114,7 +116,7 @@ static void BuildingRejectsInsufficientScrap()
 static void ModuleWeightContributes()
 {
     var simulation = new GameSimulation(installStarterModules: false);
-    BuildAt(simulation, "hydroponics_small", 4, 5);
+    BuildAt(simulation, "hydroponics_small", 4);
     Assert(Math.Abs(simulation.State.Metrics.CurrentWeight - 5) < 0.001, "Hydroponics should add five weight.");
 }
 
@@ -138,7 +140,7 @@ static void DisabledModulesDoNotConsumePower()
 {
     var simulation = new GameSimulation(installStarterModules: false);
     BuildAt(simulation, "engine_room", 1, 2);
-    BuildAt(simulation, "water_processing", 3, 6);
+    BuildAt(simulation, "water_processing", 3);
     var before = simulation.State.Metrics.PowerDemand;
     Assert(simulation.Execute(new ToggleModuleCommand("water_processing", false)).Succeeded, "Water Processing should disable.");
     var after = simulation.State.Metrics.PowerDemand;
@@ -158,7 +160,7 @@ static void PoweredHydroponicsChangesResources()
 static void HydroponicsReportsInsufficientWater()
 {
     var simulation = new GameSimulation(installStarterModules: false);
-    BuildAt(simulation, "hydroponics_small", 8, 9);
+    BuildAt(simulation, "hydroponics_small", 8);
     Assert(simulation.Execute(new AdvanceTimeCommand(24 * 21)).Succeeded, "Advance should succeed.");
     var hydroponics = simulation.State.Entities.Single(entity => entity.Name == "Hydroponics");
     Assert(Math.Abs(simulation.State.Mech.Water) < 0.001, "Hydroponics should eventually exhaust the starting water supply.");
@@ -182,6 +184,19 @@ static void InitialInteriorEntitiesAreComponentized()
     var expected = new[] { "Cockpit", "Bed", "Omni Slot", "Hydroponics", "Engine Room", "Water Processing" };
 
     Assert(names.SetEquals(expected), "The starter mech should contain exactly the six requested interior entities.");
+    Assert(state.Mech.Modules.Count == 8, "The starter mech should contain five installed modules and three default Omni Slots.");
+    Assert(state.Mech.Modules.Count(module => module.DefinitionId == "engine_room") == 1, "The starter mech should have one Engine Room.");
+    Assert(state.Mech.Modules.Count(module => module.DefinitionId == "water_processing") == 1, "The starter mech should have one Water Processing module.");
+    Assert(state.Mech.Modules.Count(module => module.DefinitionId == "hydroponics_small") == 1, "The starter mech should have one Hydroponics module.");
+    Assert(state.Mech.Modules.Count(module => module.DefinitionId == "bed") == 1, "The starter mech should have one Bed.");
+    Assert(state.Mech.Modules.Count(module => module.DefinitionId == "cockpit") == 1, "The starter mech should have one Cockpit.");
+    var starterOmniSlots = state.Mech.Modules
+        .Where(module => module.DefinitionId == "omni_slot")
+        .SelectMany(module => module.OccupiedSlots)
+        .ToHashSet();
+    Assert(starterOmniSlots.SetEquals([new SlotId(4), new SlotId(6), new SlotId(9)]), "The remaining starter quadrants should be default Omni Slots.");
+    Assert(state.Mech.Modules.Single(module => module.DefinitionId == "water_processing").OccupiedSlots.SequenceEqual([new SlotId(3)]), "Water Processing should occupy one starter quadrant.");
+    Assert(state.Mech.Modules.Single(module => module.DefinitionId == "hydroponics_small").OccupiedSlots.SequenceEqual([new SlotId(8)]), "Hydroponics should occupy one starter quadrant.");
     Assert(state.Entities.All(entity => entity.HasComponent<PositionComponent>()), "Every interior entity should have a position component.");
 
     var engine = state.Entities.Single(entity => entity.Name == "Engine Room");
@@ -248,10 +263,10 @@ static void ExplicitModulePlacementIsPreserved()
 {
     var simulation = new GameSimulation(installStarterModules: false);
     Assert(simulation.Execute(new MovePlayerCommand(new SlotId(8))).Succeeded, "Player should move to slot 8.");
-    var result = simulation.Execute(new BuildModuleCommand("hydroponics_small", [new SlotId(8), new SlotId(9)]));
+    var result = simulation.Execute(new BuildModuleCommand("hydroponics_small", [new SlotId(8)]));
     Assert(result.Succeeded, result.Message);
     var module = simulation.State.Mech.Modules.Single(candidate => candidate.DefinitionId == "hydroponics_small");
-    Assert(module.OccupiedSlots.SequenceEqual([new SlotId(8), new SlotId(9)]), "The requested slot footprint should be preserved.");
+    Assert(module.OccupiedSlots.SequenceEqual([new SlotId(8)]), "The requested one-slot footprint should be preserved.");
 }
 
 static void UnoccupiedQuadrantsDefaultToOmniSlots()
@@ -266,10 +281,10 @@ static void UnoccupiedQuadrantsDefaultToOmniSlots()
 static void BuildingRequiresPlayerPresence()
 {
     var simulation = new GameSimulation(installStarterModules: false);
-    var blocked = simulation.Execute(new BuildModuleCommand("hydroponics_small", [new SlotId(8), new SlotId(9)]));
+    var blocked = simulation.Execute(new BuildModuleCommand("hydroponics_small", [new SlotId(8)]));
     Assert(!blocked.Succeeded && blocked.Message.Contains("Player must be", StringComparison.Ordinal), "Building away from the player should fail.");
     Assert(simulation.Execute(new MovePlayerCommand(new SlotId(8))).Succeeded, "Player should move to the build footprint.");
-    Assert(simulation.Execute(new BuildModuleCommand("hydroponics_small", [new SlotId(8), new SlotId(9)])).Succeeded, "Building should succeed when the player is present.");
+    Assert(simulation.Execute(new BuildModuleCommand("hydroponics_small", [new SlotId(8)])).Succeeded, "Building should succeed when the player is present.");
 }
 
 static void PartsCatalogContainsBuildableModules()
@@ -287,6 +302,8 @@ static void PartsCatalogContainsBuildableModules()
     Assert(partIds.Contains("hydroponics_small"), "Parts should include Hydroponics.");
     Assert(partIds.Contains("storage"), "Parts should include Storage.");
     Assert(!partIds.Contains("autocannon"), "Parts should not include external combat weapons in the interior prototype.");
+    Assert(new GameSimulation(installStarterModules: false).Definitions.Single(definition => definition.Id == "water_processing").SlotsRequired == 1, "Water Processing should require one slot.");
+    Assert(new GameSimulation(installStarterModules: false).Definitions.Single(definition => definition.Id == "hydroponics_small").SlotsRequired == 1, "Hydroponics should require one slot.");
 
     var installableIds = new GameSimulation(installStarterModules: false)
         .GetInstallablePartDefinitions()
@@ -415,7 +432,8 @@ static void InteractionChoicesComeFromCapabilities()
     var hydroponics = state.Entities.Single(entity => entity.HasComponent<FoodProducerComponent>());
     var engine = state.Entities.Single(entity => entity.HasComponent<PowerGeneratorComponent>());
     var waterProcessing = state.Entities.Single(entity => entity.HasComponent<WaterProducerComponent>());
-    var omniSlot = state.Entities.Single(entity => entity.HasComponent<OmniSlotComponent>());
+    var omniSlot = state.Entities.Single(entity => entity.HasComponent<OmniSlotComponent>() &&
+        entity.GetComponent<PositionComponent>().Quadrant == new SlotId(4));
 
     Assert(InteractionSystem.GetAvailableInteractions(cockpit).SequenceEqual([InteractionType.Examine]), "Cockpit should only offer its implemented examination action.");
     Assert(InteractionSystem.GetAvailableInteractions(bed).SequenceEqual([InteractionType.Examine, InteractionType.Sleep]), "Bed should offer Examine and Sleep.");
@@ -432,7 +450,8 @@ static void CriticalComponentsGateUnsafeInteractions()
     definitions["omni_slot"] = definitions["omni_slot"] with { InitialDurability = 30 };
     var state = new GameSimulation(definitions: definitions).State;
     var bed = state.Entities.Single(entity => entity.Name == "Bed");
-    var omniSlot = state.Entities.Single(entity => entity.HasComponent<OmniSlotComponent>());
+    var omniSlot = state.Entities.Single(entity => entity.HasComponent<OmniSlotComponent>() &&
+        entity.GetComponent<PositionComponent>().Quadrant == new SlotId(4));
     var bedActions = InteractionSystem.GetAvailableInteractions(bed);
     var omniActions = InteractionSystem.GetAvailableInteractions(omniSlot);
 
@@ -490,7 +509,7 @@ static void CriticalEngineNarrativeFollowsIntegrity()
 static void StarvedHydroponicsReceivesCriticalExamination()
 {
     var simulation = new GameSimulation(installStarterModules: false);
-    BuildAt(simulation, "hydroponics_small", 8, 9);
+    BuildAt(simulation, "hydroponics_small", 8);
     Assert(simulation.Execute(new AdvanceTimeCommand(24 * 21)).Succeeded, "Advance should succeed.");
     var hydroponics = simulation.State.Entities.Single(entity => entity.HasComponent<FoodProducerComponent>());
 
@@ -532,7 +551,8 @@ static void OmniSlotInstallationAndRemoval()
 {
     var simulation = new GameSimulation();
     Assert(simulation.Execute(new MovePlayerCommand(new SlotId(4))).Succeeded, "Player should move to the Omni Slot.");
-    var omni = simulation.State.Entities.Single(entity => entity.HasComponent<OmniSlotComponent>());
+    var omni = simulation.State.Entities.Single(entity => entity.HasComponent<OmniSlotComponent>() &&
+        entity.GetComponent<PositionComponent>().Quadrant == new SlotId(4));
 
     var installed = simulation.Execute(new InteractionIntent(simulation.State.Player.Id, omni.Id, InteractionType.Install, "bed"));
     Assert(installed.Succeeded, installed.Message);
@@ -608,7 +628,7 @@ static void InteriorLayoutRendersStarterGlyphs()
     Assert(CellText(layout, 7).Contains("/\\", StringComparison.Ordinal), "Cockpit should have a viewport silhouette.");
     Assert(CellText(layout, 8).Contains("|||||", StringComparison.Ordinal), "Hydroponics should have growing trays.");
     Assert(CellText(layout, 5).Contains("_____", StringComparison.Ordinal), "Bed should have a bunk silhouette.");
-    Assert(CellText(layout, 6).Contains("~~~~~", StringComparison.Ordinal), "Water Processing should have filled tank bands.");
+    Assert(CellText(layout, 3).Contains("~~~~~", StringComparison.Ordinal), "Water Processing should have filled tank bands.");
     Assert(CellText(layout, 1).Contains("[=**=]", StringComparison.Ordinal), "Engine Room should have machinery.");
     Assert(CellText(layout, 4).Contains('.', StringComparison.Ordinal), "Omni Slot should have a centered empty-space marker.");
 }
@@ -616,13 +636,13 @@ static void InteriorLayoutRendersStarterGlyphs()
 static void InteriorWaterTankFollowsReserves()
 {
     var simulation = new GameSimulation();
-    var before = CellLines(RenderInterior(simulation.State), 6).Count(line => line.Contains("~~~~~", StringComparison.Ordinal));
+    var before = CellLines(RenderInterior(simulation.State), 3).Count(line => line.Contains("~~~~~", StringComparison.Ordinal));
     Assert(before == 2, "An 80% tank should show two filled water bands.");
 
     Assert(simulation.Execute(new ToggleModuleCommand("water_processing", false)).Succeeded, "Water Processing should disable.");
     Assert(simulation.Execute(new AdvanceTimeCommand(24 * 8)).Succeeded, "Time should advance while the purifier is shut down.");
 
-    var after = CellLines(RenderInterior(simulation.State), 6).Count(line => line.Contains("~~~~~", StringComparison.Ordinal));
+    var after = CellLines(RenderInterior(simulation.State), 3).Count(line => line.Contains("~~~~~", StringComparison.Ordinal));
     Assert(after == 1, "The depleted tank should drop to one filled water band.");
     Assert(simulation.State.Mech.Water < 50, "The simulated reserve should be below half capacity after eight days without purification.");
 }
@@ -637,7 +657,7 @@ static void InteriorLayoutMarksModuleStatus()
     Assert(simulation.Execute(new ToggleModuleCommand("engine_room", false)).Succeeded, "Engine Room should disable.");
     var offlineLayout = RenderInterior(simulation.State);
     Assert(CellLines(offlineLayout, 1)[0][8] == 'x', "A disabled module should use the offline marker instead of the worn marker.");
-    Assert(CellLines(offlineLayout, 6)[0][8] == 'x', "An unpowered consumer should be marked offline.");
+    Assert(CellLines(offlineLayout, 3)[0][8] == 'x', "An unpowered consumer should be marked offline.");
 }
 
 static void InteriorEngineFootprintConnects()
@@ -649,7 +669,7 @@ static void InteriorEngineFootprintConnects()
     Assert(machineryRow[10] == '-', "The shared horizontal Engine Room boundary should be a connector.");
     Assert(machineryRow[20] == '|' && machineryRow[30] == '|', "Unrelated cell boundaries should remain intact.");
     Assert(layout[2][10] == '|' && layout[2][20] == '|', "Hydroponics cells should retain ordinary grid boundaries.");
-    Assert(layout[9] == "+---------+---------+---------+", "The vertical Water Processing footprint should retain its row divider.");
+    Assert(layout[9] == "+---------+---------+---------+", "The Water Processing cell should retain its row divider.");
 }
 
 static void StarterInteriorLayoutMatchesSnapshot()
@@ -658,13 +678,13 @@ static void StarterInteriorLayoutMatchesSnapshot()
     {
         "         M-07 INTERIOR         ",
         "+---------+---------+---------+",
-        "|   /\\    | \" \" \" \"!| \" \" \" \"!|",
-        "|  /__\\   |  |||||  |  |||||  |",
-        "|  |[]|   |  |||||  |  |||||  |",
+        "|   /\\    | \" \" \" \"!|         |",
+        "|  /__\\   |  |||||  |    .    |",
+        "|  |[]|   |  |||||  |         |",
         "+---------+---------+---------+",
-        "|         |  _____  | |     |!|",
-        "|    .    | |_____| | |~~~~~| |",
-        "|         |    @    | |~~~~~| |",
+        "|         |  _____  |         |",
+        "|    .    | |_____| |    .    |",
+        "|         |    @    |         |",
         "+---------+---------+---------+",
         "|  [====]!|[====]  !| |     |!|",
         "|  [=**=]--[=**=]   | |~~~~~| |",
@@ -717,8 +737,8 @@ static GameSimulation CreatePoweredHydroponics()
 {
     var simulation = new GameSimulation(installStarterModules: false);
     BuildAt(simulation, "engine_room", 1, 2);
-    BuildAt(simulation, "water_processing", 3, 6);
-    BuildAt(simulation, "hydroponics_small", 8, 9);
+    BuildAt(simulation, "water_processing", 3);
+    BuildAt(simulation, "hydroponics_small", 8);
     return simulation;
 }
 

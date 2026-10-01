@@ -408,11 +408,10 @@ public sealed class GameSimulation
     private void InstallStarterModules()
     {
         InstallStarter("engine_room", new SlotId(1), new SlotId(2));
-        InstallStarter("water_processing", new SlotId(3), new SlotId(6));
-        InstallStarter("omni_slot", new SlotId(4));
+        InstallStarter("water_processing", new SlotId(3));
         InstallStarter("bed", new SlotId(5));
         InstallStarter("cockpit", new SlotId(7));
-        InstallStarter("hydroponics_small", new SlotId(8), new SlotId(9));
+        InstallStarter("hydroponics_small", new SlotId(8));
     }
 
     private void InstallStarter(string definitionId, params SlotId[] slotIds)

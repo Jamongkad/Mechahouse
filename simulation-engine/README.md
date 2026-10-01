@@ -36,13 +36,13 @@ water level, and player location are projected from the current simulation state
 ```text
          M-07 INTERIOR
 +---------+---------+---------+
-|   /\    | " " " "!| " " " "!|
-|  /__\   |  |||||  |  |||||  |
-|  |[]|   |  |||||  |  |||||  |
+|   /\    | " " " "!|         |
+|  /__\   |  |||||  |    .    |
+|  |[]|   |  |||||  |         |
 +---------+---------+---------+
-|         |  _____  | |     |!|
-|    .    | |_____| | |~~~~~| |
-|         |    @    | |~~~~~| |
+|         |  _____  |         |
+|    .    | |_____| |    .    |
+|         |    @    |         |
 +---------+---------+---------+
 |  [====]!|[====]  !| |     |!|
 |  [=**=]--[=**=]   | |~~~~~| |
@@ -54,11 +54,11 @@ water level, and player location are projected from the current simulation state
 The glyphs above represent the actual footprints:
 
 - Engine Room: slots 1, 2
-- Water Processing: slots 3, 6
+- Water Processing: slot 3
 - Omni Slot: slot 4
 - Bed: slot 5
 - Cockpit: slot 7
-- Hydroponics: slots 8, 9
+- Hydroponics: slot 8
 
 Each interior entity is an `Entity` with a component collection. The initial component types are deliberately small:
 
